@@ -279,7 +279,7 @@ player.ResetSpeed(); // Tambahkan method ini di PlayerMovement
         if (!isGameOver)
         {
             currentTime += bonusTime;
-            Debug.Log("Time Bonus: +" + bonusTime + " detik");
+            Debug.Log("Time Bonus : +" + bonusTime + " detik");
         }
     }
 
