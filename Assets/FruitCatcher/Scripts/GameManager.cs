@@ -8,193 +8,163 @@ public class GameManager : MonoBehaviour
     public static GameManager Instance;
 
     [Header("Pengaturan Game")]
-    public float timeLimit = 60f; // Batas waktu dalam detik
-    public int totalScore = 0; // Total skor pemain
-    public PlayerMovement player;
+    public float timeLimit = 60f; // Total waktu permainan dalam detik
+    public int totalScore = 0; // Skor pemain
+    public PlayerMovement player; // Referensi ke skrip player
+    public AudioClip yeaySound; // Suara saat mode boost aktif
+    public AudioClip bgmClip; // Musik latar belakang
 
     [Header("UI Elements")]
-    public TMP_Text timeLimitText; // Text untuk menampilkan waktu
-    public TMP_Text scoreText; // Text untuk menampilkan skor
-    public TMP_Text gameOverScoreText; //Text untuk menampilkan skor pada saat game over
-    public GameObject uiGameOver; // UI Game Over yang akan diaktifkan
-    public TMP_Text boostText; // atau gunakan Text biasa kalau tidak pakai TMP
-
+    public TMP_Text timeLimitText;
+    public TMP_Text scoreText;
+    public TMP_Text gameOverScoreText;
+    public TMP_Text boostText;
+    public TMP_Text endMessageText; // Teks akhir permainan
+    public GameObject uiGameOver;
 
     [Header("Status Game")]
     public bool isGameOver = false;
 
     private float currentTime;
+    private TextMeshProUGUI startText;
+
+    // Boost Mode
+    private bool isDoubleScoreAndSpeedActive = false;
+    public float speedMultiplier = 1.5f;
+    public int scoreMultiplier = 2;
 
     void Awake()
     {
-        // Implementasi Singleton
+        // Setup Singleton
         if (Instance == null)
         {
             Instance = this;
-            DontDestroyOnLoad(gameObject); // Jangan hancurkan saat load scene baru
+            DontDestroyOnLoad(gameObject);
         }
         else
         {
-            Destroy(gameObject); // Hancurkan duplikat
-            return;
+            Destroy(gameObject);
         }
     }
-    public AudioClip bgmClip;
-    private TextMeshProUGUI startText;
-    private IEnumerator ShowStartText()
-{
-    if (startText != null)
-    {
-        CanvasGroup canvasGroup = startText.GetComponent<CanvasGroup>();
-        if (canvasGroup == null)
-        {
-            canvasGroup = startText.gameObject.AddComponent<CanvasGroup>();
-        }
-
-        startText.text = "Start!";
-        startText.gameObject.SetActive(true);
-
-        // Fade-in
-        float duration = 0.3f;
-        float timer = 0f;
-        while (timer < duration)
-        {
-            timer += Time.deltaTime;
-            canvasGroup.alpha = Mathf.Lerp(0f, 1f, timer / duration);
-            yield return null;
-        }
-
-        canvasGroup.alpha = 1f;
-
-        // Tahan selama 1 detik
-        yield return new WaitForSeconds(0.6f);
-
-        // Fade-out
-        timer = 0f;
-        while (timer < duration)
-        {
-            timer += Time.deltaTime;
-            canvasGroup.alpha = Mathf.Lerp(1f, 0f, timer / duration);
-            yield return null;
-        }
-
-        canvasGroup.alpha = 0f;
-        startText.gameObject.SetActive(false);
-    }
-}
-
-    private IEnumerator BootGameFlow()
-{
-    // Tampilkan teks “Start!” selama 2 detik
-    yield return StartCoroutine(ShowStartText());
-
-    // Setelah itu baru update UI
-    UpdateTimeUI();
-    UpdateScoreUI();
-
-    // logika lain bisa dimasukkan di sini
-}
-
 
     void Start()
-{
-    // Inisialisasi awal
-    currentTime = timeLimit;
-    isGameOver = false;
-    Time.timeScale = 1f;
-
-    // Cari GameObject "Start"
-    GameObject startGO = GameObject.Find("Texts/Start");
-    if (startGO != null)
     {
-        startText = startGO.GetComponent<TextMeshProUGUI>();
+        currentTime = timeLimit;
+        isGameOver = false;
+        Time.timeScale = 1f;
+
+        // Cari teks "Start!" dari scene
+        GameObject startGO = GameObject.Find("Texts/Start");
+        if (startGO != null)
+        {
+            startText = startGO.GetComponent<TextMeshProUGUI>();
+        }
+
+        if (uiGameOver != null)
+        {
+            uiGameOver.SetActive(false);
+        }
+
+        AudioManager.Instance?.PlayBGM(bgmClip);
+
+        ValidateComponents();
+
+        StartCoroutine(BootGameFlow());
     }
-
-    if (uiGameOver != null)
-    {
-        uiGameOver.SetActive(false);
-    }
-
-    AudioManager.Instance?.PlayBGM(bgmClip);
-
-    ValidateComponents();
-
-    // Tunda update UI dan logika game sampai setelah “Start!” ditampilkan
-    StartCoroutine(BootGameFlow());
-}
-
-    // untuk mendapatkan double score
-private bool isDoubleScoreAndSpeedActive = false;
-public float speedMultiplier = 1.5f;
-public int scoreMultiplier = 2;
-
-private void ShowBoostEffect()
-{
-    if (boostText != null)
-    {
-        boostText.text = "DOUBLE MODE!";
-        boostText.gameObject.SetActive(true);
-
-        // Hilangkan setelah 2 detik
-        StartCoroutine(HideBoostTextAfterSeconds(1f));
-    }
-
-    Debug.Log("Mode BOOST aktif: Speed dan Score dobel!");
-}
-
-private IEnumerator HideBoostTextAfterSeconds(float seconds)
-{
-    yield return new WaitForSeconds(seconds);
-    boostText.gameObject.SetActive(false);
-}
 
     void Update()
     {
-        // Jika waktu tinggal setengah dan belum aktifkan boost
-        if (!isDoubleScoreAndSpeedActive && currentTime <= timeLimit / 2f)
-        {
-            isDoubleScoreAndSpeedActive = true;
-
-            // Aktifkan speed multiplier ke player
-            player.SetSpeedMultiplier(speedMultiplier);
-
-            // Aktifkan score multiplier
-            Debug.Log("Mode BOOST aktif: Speed x" + speedMultiplier + ", Score x" + scoreMultiplier);
-
-            // Tampilkan visual "DOUBLE MODE!" dan efek suara
-            ShowBoostEffect();
-        }
-        // Jika game belum berakhir, hitung mundur waktu
         if (!isGameOver)
         {
-            currentTime -= Time.deltaTime;
+            // Aktifkan boost ketika waktu setengah
+            if (!isDoubleScoreAndSpeedActive && currentTime <= timeLimit / 2f)
+            {
+                isDoubleScoreAndSpeedActive = true;
+                player.SetSpeedMultiplier(speedMultiplier);
+                AudioManager.Instance.sfxSource.PlayOneShot(yeaySound, AudioManager.Instance.sfxVolume * 1.9f);
+                ShowBoostEffect();
+            }
 
-            // Update UI waktu
+            // Kurangi waktu setiap frame
+            currentTime -= Time.deltaTime;
             UpdateTimeUI();
 
-            // Cek apakah waktu sudah habis
+            // Cek apakah waktu habis
             if (currentTime <= 0)
             {
-                GameOver();
+                EndByTime();
             }
         }
+    }
 
-        
+    // Coroutine untuk memulai game dengan efek teks "Start!"
+    private IEnumerator BootGameFlow()
+    {
+        yield return StartCoroutine(ShowStartText());
+        UpdateTimeUI();
+        UpdateScoreUI();
+    }
+
+    private IEnumerator ShowStartText()
+    {
+        if (startText != null)
+        {
+            CanvasGroup canvasGroup = startText.GetComponent<CanvasGroup>() ?? startText.gameObject.AddComponent<CanvasGroup>();
+            startText.text = "Start!";
+            startText.gameObject.SetActive(true);
+
+            float duration = 0.3f;
+            float timer = 0f;
+
+            // Fade in
+            while (timer < duration)
+            {
+                timer += Time.deltaTime;
+                canvasGroup.alpha = Mathf.Lerp(0f, 1f, timer / duration);
+                yield return null;
+            }
+
+            canvasGroup.alpha = 1f;
+            yield return new WaitForSeconds(0.6f);
+
+            // Fade out
+            timer = 0f;
+            while (timer < duration)
+            {
+                timer += Time.deltaTime;
+                canvasGroup.alpha = Mathf.Lerp(1f, 0f, timer / duration);
+                yield return null;
+            }
+
+            canvasGroup.alpha = 0f;
+            startText.gameObject.SetActive(false);
+        }
+    }
+
+    private void ShowBoostEffect()
+    {
+        if (boostText != null)
+        {
+            boostText.text = "DOUBLE MODE!";
+            boostText.gameObject.SetActive(true);
+            StartCoroutine(HideBoostTextAfterSeconds(1f));
+        }
+
+        Debug.Log("Mode BOOST aktif: Speed dan Score dobel!");
+    }
+
+    private IEnumerator HideBoostTextAfterSeconds(float seconds)
+    {
+        yield return new WaitForSeconds(seconds);
+        boostText.gameObject.SetActive(false);
     }
 
     private void UpdateTimeUI()
     {
         if (timeLimitText != null)
         {
-            // Bulatkan waktu ke integer
             int displayTime = Mathf.CeilToInt(currentTime);
-
-            // Pastikan tidak menampilkan waktu negatif
-            if (displayTime < 0)
-            {
-                displayTime = 0;
-            }
-
+            displayTime = Mathf.Max(displayTime, 0);
             timeLimitText.text = "Time: " + displayTime.ToString();
         }
     }
@@ -207,112 +177,111 @@ private IEnumerator HideBoostTextAfterSeconds(float seconds)
         }
     }
 
+    // Tambahkan skor
     public void AddScore(int scoreToAdd = 1)
     {
         if (!isGameOver)
         {
             int finalScore = isDoubleScoreAndSpeedActive ? scoreToAdd * scoreMultiplier : scoreToAdd;
-totalScore += finalScore;
-
+            totalScore += finalScore;
             UpdateScoreUI();
-            Debug.Log("Skor ditambahkan: +" + scoreToAdd + " | Total Skor: " + totalScore);
+
+            Debug.Log("Skor ditambahkan: +" + scoreToAdd + " | Total Score: " + totalScore);
         }
     }
 
-    public void GameOver()
+    // Dipanggil saat waktu habis — TAMAT
+    public void EndByTime()
     {
         if (!isGameOver)
         {
             isGameOver = true;
 
-            // Pause game
-
-            int displayTime = Mathf.CeilToInt(currentTime);
-
-            if (displayTime < 0)
-            {
-                displayTime = 0;
-            }
-
-            timeLimitText.text = "Time: " + displayTime.ToString();
-
             player.gameObject.SetActive(false);
-            // Aktifkan UI Game Over
-            if (uiGameOver != null)
+            if (uiGameOver != null) uiGameOver.SetActive(true);
+
+            int finalScore = Mathf.Max(totalScore, 0);
+            int highScore = PlayerPrefs.GetInt("HighScore", 0);
+
+            if (finalScore > highScore)
             {
-                uiGameOver.SetActive(true);
+                PlayerPrefs.SetInt("HighScore", finalScore);
+                PlayerPrefs.Save();
+                highScore = finalScore;
             }
 
-            gameOverScoreText.text = "Total Score: " + totalScore.ToString();
-
-
-            Debug.Log("Game Over! Skor Akhir: " + totalScore);
+            endMessageText.text = "GOOD JOB!";
+            gameOverScoreText.text = $"Score: {finalScore}\nHigh Score: {highScore}";
+            Debug.Log("Tamat! Skor Akhir: " + totalScore);
         }
     }
 
-    // Method untuk restart game
+    // Dipanggil oleh obstacle (misal dari ObjectFallController.cs)
+    public void GameOver(bool fromObstacle = true)
+    {
+        if (!isGameOver)
+        {
+            isGameOver = true;
+            player.gameObject.SetActive(false);
+
+            if (uiGameOver != null) uiGameOver.SetActive(true);
+
+            int finalScore = Mathf.Max(totalScore, 0);
+            int highScore = PlayerPrefs.GetInt("HighScore", 0);
+
+            if (finalScore > highScore)
+            {
+                PlayerPrefs.SetInt("HighScore", finalScore);
+                PlayerPrefs.Save();
+                highScore = finalScore;
+            }
+
+            endMessageText.text = "GAME OVER!";
+            gameOverScoreText.text = $"Score: {finalScore}\nHigh Score: {highScore}";
+            Debug.Log("Game Over karena obstacle. Skor Akhir: " + totalScore);
+        }
+    }
+
+    // Reset permainan
     public void RestartGame()
     {
         isGameOver = false;
         isDoubleScoreAndSpeedActive = false;
-player.ResetSpeed(); // Tambahkan method ini di PlayerMovement
 
+        player.ResetSpeed();
         currentTime = timeLimit;
         totalScore = 0;
         Time.timeScale = 1f;
 
-        if (uiGameOver != null)
-        {
-            uiGameOver.SetActive(false);
-        }
+        if (uiGameOver != null) uiGameOver.SetActive(false);
 
         UpdateTimeUI();
         UpdateScoreUI();
 
-        Debug.Log("Game direstart!");
         player.gameObject.SetActive(true);
+        Debug.Log("Game direstart!");
     }
 
-    // Method untuk menambah waktu (bonus waktu)
+    // Tambahkan waktu bonus
     public void AddTime(float bonusTime)
     {
         if (!isGameOver)
         {
             currentTime += bonusTime;
-            Debug.Log("Time Bonus : +" + bonusTime + " detik");
+            Debug.Log("Time Bonus: +" + bonusTime + " detik");
         }
     }
 
-    // Method untuk mendapatkan waktu sisa
-    public float GetRemainingTime()
-    {
-        return currentTime;
-    }
+    public float GetRemainingTime() => currentTime;
 
-    // Method untuk mendapatkan skor saat ini
-    public int GetCurrentScore()
-    {
-        return totalScore;
-    }
+    public int GetCurrentScore() => totalScore;
 
-
-
-    // Method untuk validasi komponen
     private void ValidateComponents()
     {
-        if (timeLimitText == null)
-        {
-            Debug.LogWarning("Time Limit Text belum diatur pada GameManager!");
-        }
-
-        if (scoreText == null)
-        {
-            Debug.LogWarning("Score Text belum diatur pada GameManager!");
-        }
-
-        if (uiGameOver == null)
-        {
-            Debug.LogWarning("UI Game Over belum diatur pada GameManager!");
-        }
+        if (timeLimitText == null) Debug.LogWarning("Time Limit Text belum diatur pada GameManager!");
+        if (scoreText == null) Debug.LogWarning("Score Text belum diatur pada GameManager!");
+        if (uiGameOver == null) Debug.LogWarning("UI Game Over belum diatur pada GameManager!");
+        if (gameOverScoreText == null) Debug.LogWarning("Game Over Score Text belum diatur!");
+        if (endMessageText == null) Debug.LogWarning("End Message Text belum diatur!");
     }
 }

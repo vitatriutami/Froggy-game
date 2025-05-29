@@ -32,9 +32,23 @@ public class ObjectSpawner : MonoBehaviour
         // Set waktu spawn pertama
         nextSpawnTime = Time.time + spawnInterval;
     }
+    private bool hasSlowedDown = false;
 
     void Update()
     {
+        // Cek apakah waktu tinggal sepertiga dan belum di-slow
+    if (!hasSlowedDown && GameManager.Instance != null)
+    {
+        float remainingTime = GameManager.Instance.GetRemainingTime();
+        float totalTime = GameManager.Instance.timeLimit;
+
+        if (remainingTime <= totalTime / 3f)
+        {
+            spawnInterval *= 0.75f; // <1
+            hasSlowedDown = true;
+            Debug.Log("Waktu tinggal sepertiga — interval spawn dipercepat.");
+        }
+    }
         // Cek apakah sudah waktunya spawn dan ada data yang valid
         if (Time.time >= nextSpawnTime && CanSpawn())
         {
